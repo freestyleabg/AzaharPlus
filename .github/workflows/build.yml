@@ -3,6 +3,9 @@ name: citra-build
 on:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   source:
     if: ${{ !github.head_ref }}

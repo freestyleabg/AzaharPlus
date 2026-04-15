@@ -12,6 +12,9 @@ concurrency:
   group: build-apk-upstream
   cancel-in-progress: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   detect-upstream:
     runs-on: ubuntu-latest
