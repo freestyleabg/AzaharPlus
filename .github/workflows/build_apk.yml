@@ -2,65 +2,72 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ AzaharPlus ]
+    inputs:
+      publish_mode:
+        description: Choose whether to upload only an artifact or also create a tagged GitHub release
+        required: true
+        default: artifact
+        type: choice
+        options:
+          - artifact
+          - release
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-manual
+  cancel-in-progress: false
 
 jobs:
-  android:
+  prepare:
     runs-on: ubuntu-latest
-    env:
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_COMPILERCHECK: content
-      CCACHE_SLOPPINESS: time_macros
-      OS: android
-      TARGET: universal
+    outputs:
+      publish_release: ${{ steps.metadata.outputs.publish_release }}
+      tag_name: ${{ steps.metadata.outputs.tag_name }}
+      release_name: ${{ steps.metadata.outputs.release_name }}
+      release_body: ${{ steps.metadata.outputs.release_body }}
 
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          fetch-depth: 0
 
-      - name: Set up cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ${{ env.CCACHE_DIR }}
-          key: ${{ runner.os }}-android-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-android-
-
-      - name: Set tag name
+      - id: metadata
+        name: Generate release metadata
         run: |
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-              echo "GIT_TAG_NAME=$GITHUB_REF_NAME" >> $GITHUB_ENV
+          MODE="${{ github.event.inputs.publish_mode }}"
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          TAG_NAME=""
+          RELEASE_NAME=""
+          RELEASE_BODY=""
+          PUBLISH_RELEASE=false
+
+          if [ "$MODE" = "release" ]; then
+            TAG_NAME="android-manual-$(date -u +'%Y%m%d-%H%M%S')-${SHORT_SHA}"
+            RELEASE_NAME="AzaharPlus Android ${TAG_NAME}"
+            RELEASE_BODY="$(printf '%s\n\n%s\n%s\n' \
+              "Manual Android release built from ${GITHUB_SHA}." \
+              "Source ref: ${GITHUB_REF_NAME}" \
+              "Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+            PUBLISH_RELEASE=true
           fi
 
-      - name: Deps
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install ccache apksigner -y
+          {
+            echo "publish_release=$PUBLISH_RELEASE"
+            echo "tag_name=$TAG_NAME"
+            echo "release_name=$RELEASE_NAME"
+            echo "release_body<<EOF"
+            printf '%s\n' "$RELEASE_BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Update Android SDK CMake version
-        run: |
-          echo "y" | ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager "cmake;3.30.3"
-
-      - name: Build
-        run: JAVA_HOME=$JAVA_HOME_17_X64 ./.ci/android.sh
-        env:
-          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
-
-      - name: Pack
-        run: ../../../.ci/pack.sh
-        working-directory: src/android/app
-        env:
-          UNPACKED: 1
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.OS }}-${{ env.TARGET }}
-          path: src/android/app/artifacts/
+  release:
+    needs: prepare
+    uses: ./.github/workflows/android_release_reusable.yml
+    with:
+      publish_release: ${{ needs.prepare.outputs.publish_release == 'true' }}
+      tag_name: ${{ needs.prepare.outputs.tag_name }}
+      release_name: ${{ needs.prepare.outputs.release_name }}
+      release_body: ${{ needs.prepare.outputs.release_body }}
+    secrets: inherit

@@ -1,0 +1,71 @@
+name: Build Android APK From Upstream Update
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-upstream
+  cancel-in-progress: false
+
+jobs:
+  detect-upstream:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.upstream.outputs.should_release }}
+      tag_name: ${{ steps.upstream.outputs.tag_name }}
+      release_name: ${{ steps.upstream.outputs.release_name }}
+      release_body: ${{ steps.upstream.outputs.release_body }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: upstream
+        name: Check upstream Azahar HEAD
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DEFAULT_BRANCH="$(gh api repos/azahar-emu/azahar --jq .default_branch)"
+          UPSTREAM_SHA="$(gh api repos/azahar-emu/azahar/commits/${DEFAULT_BRANCH} --jq .sha)"
+          SHORT_SHA="${UPSTREAM_SHA:0:7}"
+          TAG_NAME="android-upstream-${SHORT_SHA}"
+          RELEASE_NAME="AzaharPlus Android upstream ${SHORT_SHA}"
+          SHOULD_RELEASE=true
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            SHOULD_RELEASE=false
+          elif git ls-remote --exit-code --tags origin "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
+            SHOULD_RELEASE=false
+          fi
+
+          {
+            echo "should_release=$SHOULD_RELEASE"
+            echo "tag_name=$TAG_NAME"
+            echo "release_name=$RELEASE_NAME"
+            echo "release_body<<EOF"
+            echo "Automated Android release triggered after upstream Azahar changed."
+            echo
+            echo "Upstream repository: https://github.com/azahar-emu/azahar"
+            echo "Upstream branch: ${DEFAULT_BRANCH}"
+            echo "Upstream commit: ${UPSTREAM_SHA}"
+            echo "Current AzaharPlus commit: ${GITHUB_SHA}"
+            echo "Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  release:
+    if: ${{ needs.detect-upstream.outputs.should_release == 'true' }}
+    needs: detect-upstream
+    uses: ./.github/workflows/android_release_reusable.yml
+    with:
+      publish_release: true
+      tag_name: ${{ needs.detect-upstream.outputs.tag_name }}
+      release_name: ${{ needs.detect-upstream.outputs.release_name }}
+      release_body: ${{ needs.detect-upstream.outputs.release_body }}
+    secrets: inherit

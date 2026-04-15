@@ -1,0 +1,109 @@
+name: Android Release Reusable
+
+on:
+  workflow_call:
+    inputs:
+      publish_release:
+        required: false
+        type: boolean
+        default: false
+      tag_name:
+        required: false
+        type: string
+        default: ""
+      release_name:
+        required: false
+        type: string
+        default: ""
+      release_body:
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_COMPILERCHECK: content
+      CCACHE_SLOPPINESS: time_macros
+      GIT_TAG_NAME: ${{ inputs.tag_name }}
+      OS: android
+      TARGET: universal
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ${{ env.CCACHE_DIR }}
+          key: ${{ runner.os }}-android-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-android-
+
+      - name: Show release metadata
+        if: ${{ inputs.publish_release }}
+        run: |
+          echo "Preparing release ${RELEASE_NAME}"
+          echo "Using tag ${GIT_TAG_NAME}"
+        env:
+          RELEASE_NAME: ${{ inputs.release_name }}
+
+      - name: Deps
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install ccache apksigner -y
+
+      - name: Update Android SDK CMake version
+        run: |
+          echo "y" | ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager "cmake;3.30.3"
+
+      - name: Build
+        run: JAVA_HOME=$JAVA_HOME_17_X64 ./.ci/android.sh
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+
+      - name: Pack
+        run: ../../../.ci/pack.sh
+        working-directory: src/android/app
+        env:
+          UNPACKED: 1
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.OS }}-${{ env.TARGET }}
+          path: src/android/app/artifacts/
+
+      - name: Publish GitHub release
+        if: ${{ inputs.publish_release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_BODY: ${{ inputs.release_body }}
+          RELEASE_NAME: ${{ inputs.release_name }}
+        run: |
+          printf '%s\n' "$RELEASE_BODY" > release-notes.txt
+
+          if gh release view "$GIT_TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$GIT_TAG_NAME" src/android/app/artifacts/* --clobber
+            gh release edit "$GIT_TAG_NAME" \
+              --title "$RELEASE_NAME" \
+              --notes-file release-notes.txt
+          else
+            gh release create "$GIT_TAG_NAME" src/android/app/artifacts/* \
+              --target "$GITHUB_SHA" \
+              --title "$RELEASE_NAME" \
+              --notes-file release-notes.txt
+          fi
