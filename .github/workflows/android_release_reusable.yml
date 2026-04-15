@@ -11,6 +11,14 @@ on:
         required: false
         type: string
         default: ""
+      android_application_id:
+        required: false
+        type: string
+        default: ""
+      android_app_name:
+        required: false
+        type: string
+        default: ""
       release_name:
         required: false
         type: string
@@ -77,6 +85,8 @@ jobs:
           ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_APPLICATION_ID: ${{ inputs.android_application_id }}
+          ANDROID_APP_NAME: ${{ inputs.android_app_name }}
 
       - name: Pack
         run: ../../../.ci/pack.sh

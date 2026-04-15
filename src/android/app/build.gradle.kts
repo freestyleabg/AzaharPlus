@@ -61,10 +61,16 @@ android {
     }
 
     defaultConfig {
+        val configuredApplicationId =
+            System.getenv("ANDROID_APPLICATION_ID") ?: "io.github.lime3ds.android"
+        val configuredAppLabel =
+            System.getenv("ANDROID_APP_NAME") ?: "AzaharPlus"
+
         // The application ID refers to Lime3DS to allow for
         // the Play Store listing, which was originally set up for Lime3DS, to still be used.
         // applicationId = "org.azahar_emu.azahar"
-        applicationId = "io.github.lime3ds.android"
+        applicationId = configuredApplicationId
+        manifestPlaceholders["appLabel"] = configuredAppLabel
 
         minSdk = 28
         targetSdk = 35

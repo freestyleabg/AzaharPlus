@@ -11,6 +11,16 @@ on:
         options:
           - artifact
           - release
+      android_application_id:
+        description: Optional Android package id override for side-by-side installs
+        required: false
+        default: ""
+        type: string
+      android_app_name:
+        description: Optional launcher label override shown on the home screen
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -30,6 +40,8 @@ jobs:
       tag_name: ${{ steps.metadata.outputs.tag_name }}
       release_name: ${{ steps.metadata.outputs.release_name }}
       release_body: ${{ steps.metadata.outputs.release_body }}
+      android_application_id: ${{ steps.metadata.outputs.android_application_id }}
+      android_app_name: ${{ steps.metadata.outputs.android_app_name }}
 
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +52,8 @@ jobs:
         name: Generate release metadata
         run: |
           MODE="${{ github.event.inputs.publish_mode }}"
+          ANDROID_APPLICATION_ID="${{ github.event.inputs.android_application_id }}"
+          ANDROID_APP_NAME="${{ github.event.inputs.android_app_name }}"
           SHORT_SHA="$(git rev-parse --short HEAD)"
           TAG_NAME=""
           RELEASE_NAME=""
@@ -60,6 +74,8 @@ jobs:
             echo "publish_release=$PUBLISH_RELEASE"
             echo "tag_name=$TAG_NAME"
             echo "release_name=$RELEASE_NAME"
+            echo "android_application_id=$ANDROID_APPLICATION_ID"
+            echo "android_app_name=$ANDROID_APP_NAME"
             echo "release_body<<EOF"
             printf '%s\n' "$RELEASE_BODY"
             echo "EOF"
@@ -73,4 +89,6 @@ jobs:
       tag_name: ${{ needs.prepare.outputs.tag_name }}
       release_name: ${{ needs.prepare.outputs.release_name }}
       release_body: ${{ needs.prepare.outputs.release_body }}
+      android_application_id: ${{ needs.prepare.outputs.android_application_id }}
+      android_app_name: ${{ needs.prepare.outputs.android_app_name }}
     secrets: inherit
