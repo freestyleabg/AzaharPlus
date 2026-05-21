@@ -30,15 +30,20 @@ jobs:
           fetch-depth: 0
 
       - id: upstream
-        name: Check upstream Azahar HEAD
+        name: Check latest stable Azahar release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          DEFAULT_BRANCH="$(gh api repos/azahar-emu/azahar --jq .default_branch)"
-          UPSTREAM_SHA="$(gh api repos/azahar-emu/azahar/commits/${DEFAULT_BRANCH} --jq .sha)"
-          SHORT_SHA="${UPSTREAM_SHA:0:7}"
-          TAG_NAME="android-upstream-${SHORT_SHA}"
-          RELEASE_NAME="AzaharPlus Android upstream ${SHORT_SHA}"
+          UPSTREAM_JSON="$(gh api repos/azahar-emu/azahar/releases/latest)"
+
+          UPSTREAM_TAG="$(echo "$UPSTREAM_JSON" | jq -r '.tag_name')"
+          UPSTREAM_NAME="$(echo "$UPSTREAM_JSON" | jq -r '.name // .tag_name')"
+          UPSTREAM_URL="$(echo "$UPSTREAM_JSON" | jq -r '.html_url')"
+          UPSTREAM_PUBLISHED_AT="$(echo "$UPSTREAM_JSON" | jq -r '.published_at')"
+          UPSTREAM_TARGET="$(echo "$UPSTREAM_JSON" | jq -r '.target_commitish')"
+
+          TAG_NAME="android-upstream-${UPSTREAM_TAG}"
+          RELEASE_NAME="AzaharPlus Android upstream ${UPSTREAM_TAG}"
           SHOULD_RELEASE=true
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
@@ -52,11 +57,15 @@ jobs:
             echo "tag_name=$TAG_NAME"
             echo "release_name=$RELEASE_NAME"
             echo "release_body<<EOF"
-            echo "Automated Android release triggered after upstream Azahar changed."
+            echo "Automated Android release triggered after a new stable upstream Azahar release."
             echo
             echo "Upstream repository: https://github.com/azahar-emu/azahar"
-            echo "Upstream branch: ${DEFAULT_BRANCH}"
-            echo "Upstream commit: ${UPSTREAM_SHA}"
+            echo "Upstream release: ${UPSTREAM_NAME}"
+            echo "Upstream tag: ${UPSTREAM_TAG}"
+            echo "Upstream target: ${UPSTREAM_TARGET}"
+            echo "Upstream published at: ${UPSTREAM_PUBLISHED_AT}"
+            echo "Upstream release URL: ${UPSTREAM_URL}"
+            echo
             echo "Current AzaharPlus commit: ${GITHUB_SHA}"
             echo "Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo "EOF"
